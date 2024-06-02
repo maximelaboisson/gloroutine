@@ -17,7 +17,7 @@ pub type Message(e) {
   Receive(reply_with: Subject(Result(e, Nil)))
 }
 
-fn handle_message(
+fn unary_channel_handler(
  message: Message(e),
  state: #(Option(e), Option(Subject(Result(e, Nil)))),
 ) -> actor.Next(Message(e), #(Option(e), Option(Subject(Result(e, Nil))))) {
@@ -57,8 +57,8 @@ fn handle_message(
 
 
 pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
-  let assert Ok(output_channel) = actor.start(#(None, None), handle_message)
-  let assert Ok(input_channel) = actor.start(#(None, None), handle_message)
+  let assert Ok(output_channel) = actor.start(#(None, None), unary_channel_handler)
+  let assert Ok(input_channel) = actor.start(#(None, None), unary_channel_handler)
 
   let coro = Coroutine(
     yield: fn(output: o) -> i {
@@ -104,30 +104,51 @@ pub fn first_test() {
   Nil
 }
 
-pub fn first_test() {
-  let f = fn(coro: Coroutine(String, String)) -> Nil {
-    let first_resume = coro.yield("from yield 1")
-    io.println(first_resume)
+pub fn fib(a: Int, b: Int, coro: Coroutine(Nil, Int)) -> Int {
+    let new_b = a + b
+    coro.yield(new_b)
+    fib(b, new_b, coro)
+}
 
-    let second_resume = coro.yield("from yield 2")
-    io.println(second_resume)
+pub fn fib_test() {
+  let f = fn(coro: Coroutine(Nil, Int)) -> Nil {
+    coro.yield(0)
+    coro.yield(1)
+    fib(0, 1, coro)
+    Nil
   }
 
   let coro = new_coroutine(f)
-  let first_yield = coro.resume("")
-  io.println(first_yield)
 
-  let second_yield = coro.resume("from resume 1")
-  io.println(second_yield)
+  let first_yield = coro.resume(Nil)
+  io.debug(first_yield)
 
-  let finalize = coro.resume("from resume 2")
-  io.println(finalize)
+  let second_yield = coro.resume(Nil)
+  io.debug(second_yield)
 
-  process.sleep(100000)
-  Nil
+  let third_yield = coro.resume(Nil)
+  io.debug(third_yield)
+  
+  let fourth_yield = coro.resume(Nil)
+  io.debug(fourth_yield)
+
+  let fifth_yield = coro.resume(Nil)
+  io.debug(fifth_yield)
+
+  let sixth_yield = coro.resume(Nil)
+  io.debug(sixth_yield)
+
+  let seventh_yield = coro.resume(Nil)
+  io.debug(seventh_yield)
+
+  let eitght_yield = coro.resume(Nil)
+  io.debug(eitght_yield)
+
+  let ninth_yield = coro.resume(Nil)
+  io.debug(ninth_yield)
 }
 
 pub fn main() {
-  first_test()
-  second_test()
+  // first_test()
+  fib_test()
 }
