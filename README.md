@@ -1,4 +1,5 @@
 # gloroutine
+WIP coroutines for gleam, inspired by [resonate](https://github.com/resonatehq/resonate/blob/32bd3b7493a7defd09223bf7bf385a35b229e387/internal/kernel/scheduler/coroutine.go#L9)
 
 [![Package Version](https://img.shields.io/hexpm/v/gloroutine)](https://hex.pm/packages/gloroutine)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/gloroutine/)
@@ -10,7 +11,28 @@ gleam add gloroutine
 import gloroutine
 
 pub fn main() {
-  // TODO: An example of the project in use
+  pub fn fib(a: Int, b: Int, coro: c.Coroutine(Nil, Int)) -> Int {
+  let new_b = a + b
+  coro.yield(Some(new_b))
+  fib(b, new_b, coro)
+}
+
+pub fn fib_coro() {
+  let f = fn(coro: c.Coroutine(Nil, Int)) {
+    coro.yield(Some(0))
+    coro.yield(Some(1))
+    fib(0, 1, coro)
+    Nil
+  }
+
+  c.new_coroutine(f)
+}
+
+let result =
+  fib_coro()
+  |> c.take(10)
+  |> c.map(fn(x){ x * x})
+  |> c.to_list()
 }
 ```
 
