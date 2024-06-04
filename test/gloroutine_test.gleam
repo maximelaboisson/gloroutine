@@ -5,16 +5,17 @@ import gleam/option.{type Option, None, Some}
 import gleeunit
 import gleeunit/should
 
+import flow
 import gloroutine as c
 
 pub fn main() {
   gleeunit.main()
 }
 
-pub fn fib(a: Int, b: Int, coro: c.Coroutine(Nil, Int)) -> Int {
+pub fn fib(a: Int, b: Int, flow: flow.Flow(Int)) -> Int {
   let new_b = a + b
-  coro.yield(c.CoroutineOutput(new_b))
-  fib(b, new_b, coro)
+  flow.yield(c.CoroutineOutput(new_b))
+  fib(b, new_b, flow)
 }
 
 pub fn fib_coro() {
@@ -25,7 +26,7 @@ pub fn fib_coro() {
     Nil
   }
 
-  c.new_coroutine(f)
+  flow.new_flow(f)
 }
 
 pub fn fibonaci_happy_path_test() {
@@ -33,7 +34,7 @@ pub fn fibonaci_happy_path_test() {
   let result =
     fib_coro()
     |> c.take(10)
-    |> c.to_list()
+    |> flow.to_list()
 
   result |> should.equal(expected)
 }
@@ -45,7 +46,7 @@ pub fn fibonaci_squared_happy_path_test() {
     fib_coro()
     |> c.take(10)
     |> c.map(transform)
-    |> c.to_list()
+    |> flow.to_list()
 
   result |> should.equal(expected)
 }
@@ -55,7 +56,7 @@ pub fn fibonaci_filter_happy_path_test() {
   let result =
     fib_coro()
     |> c.take(10)
-    |> c.to_list()
+    |> flow.to_list()
 
   result |> should.equal(expected)
 }

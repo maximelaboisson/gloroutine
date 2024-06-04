@@ -1,10 +1,7 @@
 import gleam/erlang/process.{type Subject}
-import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/otp/task
-
-pub type StopItteration
 
 pub type CoroutineInput(i) {
   CoroutineInput(i)
@@ -105,44 +102,6 @@ pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
   })
 
   coro
-}
-
-// TODO: move to flow
-fn inner_collect(coro: Coroutine(Nil, o)) {
-  case coro.resume(CoroutineInput(Nil)) {
-    StopIteration -> {
-      Nil
-    }
-    CoroutineOutput(_) -> inner_collect(coro)
-  }
-}
-
-// TODO: move to flow
-pub fn collect(coro: Coroutine(Nil, o)) -> Nil {
-  case coro.resume(PrimeIteration) {
-    StopIteration -> Nil
-    CoroutineOutput(_) -> inner_collect(coro)
-  }
-}
-
-// TODO: move to flow
-fn inner_to_list(coro: Coroutine(Nil, o), result: List(o)) -> List(o) {
-  case coro.resume(CoroutineInput(Nil)) {
-    StopIteration -> {
-      list.reverse(result)
-    }
-    CoroutineOutput(value) -> {
-      inner_to_list(coro, [value, ..result])
-    }
-  }
-}
-
-// TODO: move to flow
-pub fn to_list(coro: Coroutine(Nil, o)) -> List(o) {
-  case coro.resume(PrimeIteration) {
-    StopIteration -> []
-    CoroutineOutput(value) -> inner_to_list(coro, [value])
-  }
 }
 
 fn inner_map(
