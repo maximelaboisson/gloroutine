@@ -1,13 +1,14 @@
-import gleam/io
 import gleam/erlang/process.{type Subject}
+import gleam/io
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/otp/task
 
-pub type Coroutine(i, o){
+pub type Coroutine(i, o) {
   Coroutine(
-    yield: fn(o) -> i,
-    resume: fn(i) -> o
+    yield: fn(Option(o)) -> Option(i),
+    resume: fn(Option(i)) -> Option(o),
   )
 }
 
@@ -18,8 +19,8 @@ pub type Message(e) {
 }
 
 fn unary_channel_handler(
- message: Message(e),
- state: #(Option(e), Option(Subject(Result(e, Nil)))),
+  message: Message(e),
+  state: #(Option(e), Option(Subject(Result(e, Nil)))),
 ) -> actor.Next(Message(e), #(Option(e), Option(Subject(Result(e, Nil))))) {
   case message {
     Shutdown -> actor.Stop(process.Normal)
@@ -33,8 +34,8 @@ fn unary_channel_handler(
           actor.continue(#(Some(element), None))
         }
         _ -> {
-          io.print("not normal - should panic here")
-          actor.Stop(process.Normal)
+          io.print("unary channel is full")
+          panic
         }
       }
     }
@@ -48,107 +49,207 @@ fn unary_channel_handler(
           actor.continue(#(None, Some(client)))
         }
         _ -> {
-          io.print("not normal - should panic here")
-          actor.Stop(process.Normal)
+          io.print("unary channel already has a receiver")
+          panic
         }
       }
   }
 }
 
-
 pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
-  let assert Ok(output_channel) = actor.start(#(None, None), unary_channel_handler)
-  let assert Ok(input_channel) = actor.start(#(None, None), unary_channel_handler)
+  let assert Ok(output_channel) =
+    actor.start(#(None, None), unary_channel_handler)
+  let assert Ok(input_channel) =
+    actor.start(#(None, None), unary_channel_handler)
 
-  let coro = Coroutine(
-    yield: fn(output: o) -> i {
-      process.send(output_channel, Send(output))
-      let assert Ok(input) = process.call(input_channel, Receive, 100000)
-      input
-    },
-    resume: fn(input: i) -> o {
-      process.send(input_channel, Send(input))
-      let assert Ok(output) = process.call(output_channel, Receive, 100000)
-      output
-    },
-  )
-  
-  task.async(fn(){
-    let assert Ok(element) = process.call(input_channel, Receive, 100000)
+  let coro =
+    Coroutine(
+      yield: fn(output: Option(o)) -> Option(i) {
+        process.send(output_channel, Send(output))
+        let assert Ok(input) = process.call(input_channel, Receive, 100_000)
+        input
+      },
+      resume: fn(input: Option(i)) -> Option(o) {
+        process.send(input_channel, Send(input))
+        let assert Ok(output) = process.call(output_channel, Receive, 100_000)
+        output
+      },
+    )
+
+  task.async(fn() {
+    // blocks the coro until first resume is sent
+    let assert Ok(_) = process.call(input_channel, Receive, 100_000)
     f(coro)
+
+    process.send(input_channel, Shutdown)
+    process.send(output_channel, Shutdown)
   })
 
   coro
 }
 
-pub fn first_test() {
-  let f = fn(coro: Coroutine(String, String)) -> Nil {
-    let first_resume = coro.yield("from yield 1")
-    io.println(first_resume)
+fn inner_collect(coro: Coroutine(Nil, o)) {
+  case coro.resume(Some(Nil)) {
+    None -> {
+      Nil
+    }
+    Some(_) -> inner_collect(coro)
+  }
+}
 
-    let second_resume = coro.yield("from yield 2")
-    io.println(second_resume)
+pub fn collect(coro: Coroutine(Nil, o)) -> Nil {
+  case coro.resume(None) {
+    None -> Nil
+    Some(_) -> inner_collect(coro)
+  }
+}
+
+fn inner_to_list(coro: Coroutine(Nil, o), result: List(o)) -> List(o) {
+  case coro.resume(Some(Nil)) {
+    None -> {
+      list.reverse(result)
+    }
+    Some(value) -> {
+      inner_to_list(coro, [value, ..result])
+    }
+  }
+}
+
+pub fn to_list(coro: Coroutine(Nil, o)) -> List(o) {
+  case coro.resume(None) {
+    None -> []
+    Some(value) -> inner_to_list(coro, [value])
+  }
+}
+
+fn inner_map(
+  inner_coro: Coroutine(i, o),
+  outer_coro: Coroutine(i, p),
+  f: fn(o) -> p,
+  output: Option(p),
+) {
+  case outer_coro.yield(output) {
+    None -> {
+      outer_coro.yield(None)
+      Nil
+    }
+    Some(value) -> {
+      case inner_coro.resume(Some(value)) {
+        None -> {
+          outer_coro.yield(None)
+          Nil
+        }
+        Some(v) -> {
+          inner_map(inner_coro, outer_coro, f, Some(f(v)))
+        }
+      }
+    }
+  }
+}
+
+pub fn map(inner_coro: Coroutine(i, o), f: fn(o) -> p) -> Coroutine(i, p) {
+  let body = fn(outer_coro: Coroutine(i, p)) -> Nil {
+    case inner_coro.resume(None) {
+      None -> {
+        outer_coro.yield(None)
+        Nil
+      }
+      Some(v) -> {
+        inner_map(inner_coro, outer_coro, f, Some(f(v)))
+        Nil
+      }
+    }
   }
 
-  let coro = new_coroutine(f)
-  let first_yield = coro.resume("")
-  io.println(first_yield)
-
-  let second_yield = coro.resume("from resume 1")
-  io.println(second_yield)
-
-  let finalize = coro.resume("from resume 2")
-  io.println(finalize)
-
-  process.sleep(100000)
-  Nil
+  new_coroutine(body)
 }
 
-pub fn fib(a: Int, b: Int, coro: Coroutine(Nil, Int)) -> Int {
-    let new_b = a + b
-    coro.yield(new_b)
-    fib(b, new_b, coro)
+fn inner_on_each(
+  inner_coro: Coroutine(i, o),
+  outer_coro: Coroutine(i, o),
+  f: fn(o) -> Nil,
+  output: Option(o),
+) {
+  case outer_coro.yield(output) {
+    None -> {
+      outer_coro.yield(None)
+      Nil
+    }
+    Some(value) -> {
+      case inner_coro.resume(Some(value)) {
+        None -> {
+          outer_coro.yield(None)
+          Nil
+        }
+        Some(v) -> {
+          f(v)
+          inner_on_each(inner_coro, outer_coro, f, Some(v))
+        }
+      }
+    }
+  }
 }
 
-pub fn fib_test() {
-  let f = fn(coro: Coroutine(Nil, Int)) -> Nil {
-    coro.yield(0)
-    coro.yield(1)
-    fib(0, 1, coro)
-    Nil
+pub fn on_each(inner_coro: Coroutine(i, o), f: fn(o) -> Nil) -> Coroutine(i, o) {
+  let body = fn(outer_coro: Coroutine(i, o)) -> Nil {
+    case inner_coro.resume(None) {
+      None -> {
+        outer_coro.yield(None)
+        Nil
+      }
+      Some(v) -> {
+        f(v)
+        inner_on_each(inner_coro, outer_coro, f, Some(v))
+        Nil
+      }
+    }
   }
 
-  let coro = new_coroutine(f)
-
-  let first_yield = coro.resume(Nil)
-  io.debug(first_yield)
-
-  let second_yield = coro.resume(Nil)
-  io.debug(second_yield)
-
-  let third_yield = coro.resume(Nil)
-  io.debug(third_yield)
-  
-  let fourth_yield = coro.resume(Nil)
-  io.debug(fourth_yield)
-
-  let fifth_yield = coro.resume(Nil)
-  io.debug(fifth_yield)
-
-  let sixth_yield = coro.resume(Nil)
-  io.debug(sixth_yield)
-
-  let seventh_yield = coro.resume(Nil)
-  io.debug(seventh_yield)
-
-  let eitght_yield = coro.resume(Nil)
-  io.debug(eitght_yield)
-
-  let ninth_yield = coro.resume(Nil)
-  io.debug(ninth_yield)
+  new_coroutine(body)
 }
 
-pub fn main() {
-  // first_test()
-  fib_test()
+fn inner_take(
+  inner_coro: Coroutine(i, o),
+  outer_coro: Coroutine(i, o),
+  input: Option(i),
+  number: Int,
+) {
+  case number == 0 {
+    True -> {
+      outer_coro.yield(None)
+      Nil
+    }
+    False -> {
+      case inner_coro.resume(input) {
+        None -> {
+          outer_coro.yield(None)
+          Nil
+        }
+        Some(v) -> {
+          let input = outer_coro.yield(Some(v))
+          inner_take(inner_coro, outer_coro, input, number - 1)
+          Nil
+        }
+      }
+      Nil
+    }
+  }
+}
+
+pub fn take(inner_coro: Coroutine(i, o), number: Int) -> Coroutine(i, o) {
+  let body = fn(outer_coro: Coroutine(i, o)) -> Nil {
+    case inner_coro.resume(None) {
+      None -> {
+        outer_coro.yield(None)
+        Nil
+      }
+      Some(v) -> {
+        let input = outer_coro.yield(Some(v))
+        inner_take(inner_coro, outer_coro, input, number - 1)
+        Nil
+      }
+    }
+  }
+
+  new_coroutine(body)
 }
