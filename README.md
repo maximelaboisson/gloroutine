@@ -8,10 +8,10 @@ WIP coroutines for gleam, inspired by [resonate](https://github.com/resonatehq/r
 gleam add gloroutine
 ```
 ```gleam
-import gloroutine
+import gloroutine as c
+import gleam/option.{type Option, None, Some}
 
-pub fn main() {
-  pub fn fib(a: Int, b: Int, coro: c.Coroutine(Nil, Int)) -> Int {
+pub fn fib(a: Int, b: Int, coro: c.Coroutine(Nil, Int)) -> Int {
   let new_b = a + b
   coro.yield(Some(new_b))
   fib(b, new_b, coro)
@@ -28,10 +28,11 @@ pub fn fib_coro() {
   c.new_coroutine(f)
 }
 
-let result =
+pub fn main() {
+  let result =
   fib_coro()
   |> c.take(10)
-  |> c.map(fn(x){ x * x})
+  |> c.map(fn(x){ x * x })
   |> c.to_list()
 }
 ```
