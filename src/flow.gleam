@@ -4,9 +4,6 @@ import gloroutine as c
 pub type Flow(o) =
   c.Coroutine(Nil, o)
 
-pub type FlowOutput(o) =
-  c.CoroutineOutput(o)
-
 pub fn new_flow(f: fn(Flow(o)) -> Nil) -> Flow(o) {
   c.new_coroutine(f)
 }

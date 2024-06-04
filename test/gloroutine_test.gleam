@@ -19,10 +19,10 @@ pub fn fib(a: Int, b: Int, flow: flow.Flow(Int)) -> Int {
 }
 
 pub fn fib_coro() {
-  let f = fn(coro: c.Coroutine(Nil, Int)) {
-    coro.yield(c.CoroutineOutput(0))
-    coro.yield(c.CoroutineOutput(1))
-    fib(0, 1, coro)
+  let f = fn(flow: flow.Flow(Int)) {
+    flow.yield(c.CoroutineOutput(0))
+    flow.yield(c.CoroutineOutput(1))
+    fib(0, 1, flow)
     Nil
   }
 
