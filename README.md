@@ -18,7 +18,7 @@ pub fn fib(a: Int, b: Int, coro: c.Coroutine(Nil, Int)) -> Int {
 }
 
 pub fn fib_coro() {
-  let f = fn(coro: c.Coroutine(Nil, Int)) {
+  let f = fn(coro: c.Coroutine(Nil, Int)) -> Coroutine(Nil, Int){
     coro.yield(Some(0))
     coro.yield(Some(1))
     fib(0, 1, coro)
