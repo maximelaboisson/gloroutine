@@ -97,6 +97,7 @@ pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
     let assert Ok(_) = process.call(input_channel, Receive, 100_000)
     f(coro)
 
+    // TODO: this should be tested for concurrency, not sure this actually is safe to shutdown directly
     process.send(input_channel, Shutdown)
     process.send(output_channel, Shutdown)
   })
