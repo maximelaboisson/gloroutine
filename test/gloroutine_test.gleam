@@ -52,10 +52,23 @@ pub fn fibonaci_squared_happy_path_test() {
 }
 
 pub fn fibonaci_filter_happy_path_test() {
-  let expected = [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+  let expected = [0, 1, 1, 2, 3, 5, 8]
   let result =
     fib_coro()
     |> c.take(10)
+    |> c.filter(fn(x) { x < 10 })
+    |> c.take_while(fn(x) {
+      case x {
+        None -> False
+        Some(_) -> True
+      }
+    })
+    |> c.map(fn(x) {
+      case x {
+        Some(value) -> value
+        None -> panic
+      }
+    })
     |> flow.to_list()
 
   result |> should.equal(expected)

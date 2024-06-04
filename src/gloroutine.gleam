@@ -1,4 +1,5 @@
 import gleam/erlang/process.{type Subject}
+import gleam/io
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/otp/task
@@ -105,6 +106,19 @@ pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
   coro
 }
 
+pub fn filter(
+  inner_coro: Coroutine(i, o),
+  f: fn(o) -> Bool,
+) -> Coroutine(i, Option(o)) {
+  inner_coro
+  |> map(fn(elem: o) {
+    case f(elem) {
+      True -> Some(elem)
+      False -> None
+    }
+  })
+}
+
 fn inner_map(
   inner_coro: Coroutine(i, o),
   outer_coro: Coroutine(i, p),
@@ -199,6 +213,53 @@ pub fn take(inner_coro: Coroutine(i, o), number: Int) -> Coroutine(i, o) {
       CoroutineOutput(v) -> {
         let input = outer_coro.yield(CoroutineOutput(v))
         inner_take(inner_coro, outer_coro, input, number - 1)
+        Nil
+      }
+    }
+  }
+
+  new_coroutine(body)
+}
+
+fn inner_take_while(
+  inner_coro: Coroutine(i, o),
+  outer_coro: Coroutine(i, o),
+  f: fn(o) -> Bool,
+  output: o,
+) {
+  case f(output) {
+    False -> {
+      outer_coro.yield(StopIteration)
+      Nil
+    }
+    True -> {
+      let input = outer_coro.yield(CoroutineOutput(output))
+      case inner_coro.resume(input) {
+        StopIteration -> {
+          outer_coro.yield(StopIteration)
+          Nil
+        }
+        CoroutineOutput(b) -> {
+          inner_take_while(inner_coro, outer_coro, f, b)
+          Nil
+        }
+      }
+    }
+  }
+}
+
+pub fn take_while(
+  inner_coro: Coroutine(i, o),
+  f: fn(o) -> Bool,
+) -> Coroutine(i, o) {
+  let body = fn(outer_coro: Coroutine(i, o)) -> Nil {
+    case inner_coro.resume(PrimeIteration) {
+      StopIteration -> {
+        outer_coro.yield(StopIteration)
+        Nil
+      }
+      CoroutineOutput(v) -> {
+        inner_take_while(inner_coro, outer_coro, f, v)
         Nil
       }
     }
