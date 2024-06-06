@@ -5,37 +5,39 @@ import gloroutine as c
 pub type Flow(o) =
   c.Coroutine(Nil, o)
 
-// fn inner_take(
-//   inner_coro: Flow(o),
-//   outer_coro: Flow(o),
-//   number: Int,
-// ) -> Option(o) {
-//   case number == 0 {
-//     True -> {
-//       use _, _ <- outer_coro.yield(None)
-//       None
-//     }
-//     False -> {
-//       use output, inner_coro <- inner_coro.resume(Some(Nil))
-//       use _, outer_coro <- outer_coro.yield(output)
-//       inner_take(inner_coro, outer_coro, number - 1)
-//     }
-//   }
-// }
+pub fn new_flow(f: fn(Flow(o)) -> Nil) -> Flow(o) {
+  c.new_coroutine(f)
+}
 
-// pub fn take(inner_coro: Flow(o), number: Int) -> Flow(o) {
-//   // TODO: validate number >= 1
-//   let body = fn(outer_coro: Flow(o)) -> Option(o) {
-//     use value, inner_coro <- inner_coro.resume(None)
-//     use _, outer_coro <- outer_coro.yield(value)
-//     inner_take(inner_coro, outer_coro, number - 1)
-//   }
+fn inner_take(inner_coro: Flow(o), outer_coro: Flow(o), number: Int) -> Nil {
+  use output, inner_coro <- inner_coro.resume(Some(Nil))
+  case output {
+    c.StopIteration(output_value) ->
+      outer_coro.yield(c.StopIteration(output_value), fn(_, _) { panic })
+    c.CoroutineOutput(output_value) -> {
+      case number == 1 {
+        True -> {
+          outer_coro.yield(c.StopIteration(output_value), fn(_, _) { panic })
+        }
+        False -> {
+          use _, outer_coro <- outer_coro.yield(output)
+          inner_take(inner_coro, outer_coro, number - 1)
+        }
+      }
+    }
+  }
+}
 
-//   c.new_coroutine(body)
-// }
-// pub fn new_flow(f: fn(Flow(o)) -> Nil) -> Flow(o) {
-//   c.new_coroutine(f)
-// }
+pub fn take(inner_coro: Flow(o), number: Int) -> Flow(o) {
+  // TODO: validate number >= 1
+  let body = fn(outer_coro: Flow(o)) -> Nil {
+    use value, inner_coro <- inner_coro.resume(None)
+    use _, outer_coro <- outer_coro.yield(value)
+    inner_take(inner_coro, outer_coro, number - 1)
+  }
+
+  c.new_coroutine(body)
+}
 
 // fn inner_collect(coro: Flow(o)) {
 //   case coro.resume(c.CoroutineInput(Nil)) {
@@ -55,27 +57,34 @@ pub type Flow(o) =
 
 pub fn inner_to_list(
   inner_coro: Flow(o),
-  outer_coro: c.Coroutine(o, List(o)),
+  outer_coro: Flow(List(o)),
   acc: List(o),
-  input: Option(Nil),
 ) {
-  use input, inner_coro <- inner_coro.resume(input)
+  use input, inner_coro <- inner_coro.resume(Some(Nil))
   case input {
-    None -> {
-      outer_coro.yield(Some(list.reverse(acc)), fn(_, _) { panic })
-      Nil
+    c.StopIteration(input_value) -> {
+      outer_coro.yield(
+        c.StopIteration(list.reverse([input_value, ..acc])),
+        fn(_, _) { panic },
+      )
     }
-    Some(value) -> {
-      inner_to_list(inner_coro, outer_coro, [value, ..acc], Some(Nil))
-      Nil
+    c.CoroutineOutput(input_value) -> {
+      inner_to_list(inner_coro, outer_coro, [input_value, ..acc])
     }
   }
 }
 
-pub fn to_list(inner_coro: Flow(o)) -> c.Coroutine(o, List(o)) {
-  let body = fn(outer_coro: c.Coroutine(o, List(o))) {
-    inner_to_list(inner_coro, outer_coro, [], None)
-    Nil
+pub fn to_list(inner_coro: Flow(o)) -> Flow(List(o)) {
+  let body = fn(outer_coro: Flow(List(o))) {
+    use input, inner_coro <- inner_coro.resume(None)
+    case input {
+      c.StopIteration(input_value) -> {
+        outer_coro.yield(c.StopIteration([input_value]), fn(_, _) { panic })
+      }
+      c.CoroutineOutput(input_value) -> {
+        inner_to_list(inner_coro, outer_coro, [input_value])
+      }
+    }
   }
 
   c.new_coroutine(body)

@@ -12,20 +12,27 @@ pub fn main() {
   gleeunit.main()
 }
 
-pub fn inner_fib_coro(a: Int, b: Int, coro: flow.Flow(Int)) {
+// pub fn inner_fib_coro(a: Int, b: Int, coro: flow.Flow(Int)) {
+//   let new_b = a + b
+//   use _, coro <- coro.yield(Some(new_b))
+//   inner_fib_coro(b, new_b, coro)
+// }
+
+pub fn fib(a: Int, b: Int, flow: flow.Flow(Int)) -> Nil {
   let new_b = a + b
-  use _, coro <- coro.yield(Some(new_b))
-  inner_fib_coro(b, new_b, coro)
+  use _, flow <- flow.yield(c.CoroutineOutput(new_b))
+  fib(b, new_b, flow)
 }
 
 pub fn fib_coro() {
-  let f = fn(coro: flow.Flow(Int)) {
-    use _, coro <- coro.yield(Some(0))
-    use _, coro <- coro.yield(Some(1))
-    inner_fib_coro(0, 1, coro)
+  let f = fn(flow: flow.Flow(Int)) {
+    use _, flow <- flow.yield(c.CoroutineOutput(0))
+    use _, flow <- flow.yield(c.CoroutineOutput(1))
+    fib(0, 1, flow)
+    Nil
   }
 
-  c.new_coroutine(f)
+  flow.new_flow(f)
 }
 
 pub fn fibonaci_happy_path_test() {
@@ -37,9 +44,12 @@ pub fn fibonaci_happy_path_test() {
       io.debug(x)
       Nil
     })
+    |> flow.take(10)
     |> flow.to_list()
-  // |> flow.take(10)
-  // result |> should.equal(expected)
+
+  use output, _ <- result_coro.resume(None)
+  let assert c.StopIteration(result) = output
+  result |> should.equal(expected)
 }
 // pub fn fibonaci_squared_happy_path_test() {
 //   let transform = fn(x) { x * x }
