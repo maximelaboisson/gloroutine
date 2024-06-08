@@ -1,9 +1,8 @@
-import gleam/io
 import gleam/option.{type Option, None, Some}
 
 pub type CoroutineOutput(o) {
-  CoroutineOutput(o)
-  StopIteration(o)
+  Yielded(o)
+  Complete(o)
 }
 
 pub type Coroutine(i, o) {
@@ -13,7 +12,7 @@ pub type Coroutine(i, o) {
   )
 }
 
-pub fn build_yield_coroutine(outer_continuation) {
+fn build_yield_coroutine(outer_continuation) {
   Coroutine(
     resume: fn(_, _) { panic },
     yield: fn(
@@ -26,8 +25,9 @@ pub fn build_yield_coroutine(outer_continuation) {
   )
 }
 
-pub fn build_resume_coroutine(outer_continnuation) {
+fn build_resume_coroutine(outer_continnuation) {
   Coroutine(
+    yield: fn(_, _) { panic },
     resume: fn(
       input: Option(i),
       inner_continuation: fn(CoroutineOutput(o), Coroutine(i, o)) -> Nil,
@@ -35,27 +35,19 @@ pub fn build_resume_coroutine(outer_continnuation) {
       let coroutine = build_yield_coroutine(inner_continuation)
       outer_continnuation(input, coroutine)
     },
-    yield: fn(_, _) { panic },
   )
 }
 
 pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
   Coroutine(
+    yield: fn(_, _) { panic },
     resume: fn(
       _: Option(i),
       outer_continuation: fn(CoroutineOutput(o), Coroutine(i, o)) -> Nil,
     ) -> Nil {
-      let coro =
-        Coroutine(
-          resume: fn(_, _) { panic },
-          yield: fn(output: CoroutineOutput(o), continuation) {
-            let coroutine = build_resume_coroutine(continuation)
-            outer_continuation(output, coroutine)
-          },
-        )
+      let coro = build_yield_coroutine(outer_continuation)
       f(coro)
     },
-    yield: fn(_, _) { panic },
   )
 }
 
@@ -66,14 +58,14 @@ fn inner_on_each(
   output: o,
 ) -> Nil {
   f(output)
-  use input, outer_coro <- outer_coro.yield(CoroutineOutput(output))
+  use input, outer_coro <- outer_coro.yield(Yielded(output))
   use output, inner_coro <- inner_coro.resume(input)
   case output {
-    StopIteration(output_value) -> {
+    Complete(output_value) -> {
       f(output_value)
-      outer_coro.yield(StopIteration(output_value), fn(_, _) { panic })
+      outer_coro.yield(Complete(output_value), fn(_, _) { panic })
     }
-    CoroutineOutput(output_value) ->
+    Yielded(output_value) ->
       inner_on_each(inner_coro, outer_coro, f, output_value)
   }
 }
@@ -82,11 +74,11 @@ pub fn on_each(inner_coro: Coroutine(i, o), f: fn(o) -> Nil) -> Coroutine(i, o) 
   let body = fn(outer_coro: Coroutine(i, o)) {
     use output, inner_coro <- inner_coro.resume(None)
     case output {
-      StopIteration(output_value) -> {
+      Complete(output_value) -> {
         f(output_value)
-        outer_coro.yield(StopIteration(output_value), fn(_, _) { panic })
+        outer_coro.yield(Complete(output_value), fn(_, _) { panic })
       }
-      CoroutineOutput(output_value) ->
+      Yielded(output_value) ->
         inner_on_each(inner_coro, outer_coro, f, output_value)
     }
   }
