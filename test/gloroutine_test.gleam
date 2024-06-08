@@ -12,12 +12,6 @@ pub fn main() {
   gleeunit.main()
 }
 
-// pub fn inner_fib_coro(a: Int, b: Int, coro: flow.Flow(Int)) {
-//   let new_b = a + b
-//   use _, coro <- coro.yield(Some(new_b))
-//   inner_fib_coro(b, new_b, coro)
-// }
-
 pub fn fib(a: Int, b: Int, flow: Sequence(Int)) -> Nil {
   let new_b = a + b
   use _, flow <- flow.yield(Yielded(new_b))
