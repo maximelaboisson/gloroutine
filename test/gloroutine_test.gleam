@@ -1,13 +1,9 @@
-import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
-
-import gloroutine.{
-  Complete, Prime, Yielded, filter, map, on_each, take, take_while,
-}
+import gloroutine.{Yielded, filter, map, on_each, take, take_while}
 import sequence.{type Sequence, new_sequence, to_list}
 
 pub fn main() {
