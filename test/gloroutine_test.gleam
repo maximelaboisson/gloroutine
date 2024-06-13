@@ -1,9 +1,14 @@
+import aio.{type Request, type Response}
+import gleam/erlang/process.{type Subject}
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
-import gloroutine.{Yielded, filter, map, on_each, take, take_while}
+import gloop
+import gloroutine.{
+  type Coroutine, Prime, Yielded, filter, map, on_each, take, take_while,
+}
 import sequence.{type Sequence, new_sequence, to_list}
 
 pub fn main() {
@@ -32,10 +37,6 @@ pub fn fibonaci_happy_path_test() {
 
   let result =
     fib_coro()
-    |> on_each(fn(x) {
-      io.debug(x)
-      Nil
-    })
     |> take(10)
     |> to_list()
 
@@ -75,4 +76,29 @@ pub fn fibonaci_filter_happy_path_test() {
     |> to_list()
 
   result |> should.equal(expected)
+}
+
+pub fn aio_coro() {
+  let f = fn(flow: Coroutine(Response, Request)) {
+    flow.yield(Yielded(aio.StoreRequest(store: "postgresql", command: "fetch")))
+    flow.yield(Yielded(aio.StoreRequest(store: "sqlite", command: "fetch")))
+    Nil
+  }
+
+  gloroutine.new_coroutine(f)
+}
+
+pub fn gloop_test() {
+  let coro = aio_coro()
+  let event_loop = gloop.new_event_loop()
+
+  let runnable = gloop.RunnableCoroutine(coro, Prime)
+
+  process.send(event_loop, gloop.Add(runnable))
+  process.send(event_loop, gloop.Tick(1))
+
+  process.send(event_loop, gloop.Add(runnable))
+  process.send(event_loop, gloop.Tick(1))
+
+  process.sleep_forever()
 }
