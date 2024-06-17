@@ -66,7 +66,7 @@ fn unary_channel_handler(
   }
 }
 
-pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
+pub fn new(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
   let assert Ok(output_channel) =
     actor.start(
       UnaryChannelState(element: None, subject: None),
@@ -82,25 +82,25 @@ pub fn new_coroutine(f: fn(Coroutine(i, o)) -> Nil) -> Coroutine(i, o) {
     Coroutine(
       yield: fn(output: CoroutineOutput(o)) -> CoroutineInput(i) {
         process.send(output_channel, Send(output))
-        let assert Ok(input) = process.call(input_channel, Receive, 100_000)
+        let assert Ok(input) = process.call(input_channel, Receive, 100_000_000)
         input
       },
       resume: fn(input: CoroutineInput(i)) -> CoroutineOutput(o) {
         process.send(input_channel, Send(input))
-        let assert Ok(output) = process.call(output_channel, Receive, 100_000)
+        let assert Ok(output) =
+          process.call(output_channel, Receive, 100_000_000)
         output
       },
     )
 
   task.async(fn() {
     // blocks the coroutine until it's primed
-    let assert Ok(_) = process.call(input_channel, Receive, 100_000)
+    let assert Ok(_) = process.call(input_channel, Receive, 100_000_000)
 
     f(coro)
-
     // TODO: this should be tested for concurrency, not sure this actually is safe to shutdown directly
-    process.send(input_channel, Shutdown)
-    process.send(output_channel, Shutdown)
+    // process.send(input_channel, Shutdown)
+    // process.send(output_channel, Shutdown)
   })
 
   coro
@@ -146,7 +146,7 @@ pub fn map(inner_coro: Coroutine(i, o), f: fn(o) -> p) -> Coroutine(i, p) {
     inner_map(inner_coro, outer_coro, wrapped_f, wrapped_f(value))
   }
 
-  new_coroutine(body)
+  new(body)
 }
 
 fn inner_on_each(
@@ -179,7 +179,7 @@ pub fn on_each(inner_coro: Coroutine(i, o), f: fn(o) -> Nil) -> Coroutine(i, o) 
     inner_on_each(inner_coro, outer_coro, safe_f, input)
   }
 
-  new_coroutine(body)
+  new(body)
 }
 
 fn inner_take(
@@ -218,7 +218,7 @@ pub fn take(inner_coro: Coroutine(i, o), remaining: Int) -> Coroutine(i, o) {
     }
   }
 
-  new_coroutine(body)
+  new(body)
 }
 
 fn inner_take_while(
@@ -265,5 +265,5 @@ pub fn take_while(
     }
   }
 
-  new_coroutine(body)
+  new(body)
 }

@@ -78,27 +78,82 @@ pub fn fibonaci_filter_happy_path_test() {
   result |> should.equal(expected)
 }
 
-pub fn aio_coro() {
-  let f = fn(flow: Coroutine(Response, Request)) {
-    flow.yield(Yielded(aio.StoreRequest(store: "postgresql", command: "fetch")))
-    flow.yield(Yielded(aio.StoreRequest(store: "sqlite", command: "fetch")))
+pub fn first_coro() {
+  let f = fn(coro: Coroutine(Response, Request)) {
+    let first_resumed =
+      coro.yield(
+        Yielded(
+          aio.Request(kind: aio.Store, commands: [
+            aio.StoreCommand("coro1_cmd1"),
+          ]),
+        ),
+      )
+    io.debug("from coro 1, first resumed:")
+    io.debug(first_resumed)
+
+    let second_resumed =
+      coro.yield(
+        Yielded(
+          aio.Request(kind: aio.Store, commands: [
+            aio.StoreCommand("coro1_cmd2"),
+          ]),
+        ),
+      )
+    io.debug("from coro 1, second resumed:")
+    io.debug(second_resumed)
     Nil
   }
 
-  gloroutine.new_coroutine(f)
+  let coro = gloroutine.new(f)
+  gloop.RunnableCoroutine(coro: coro, next: Prime)
+}
+
+pub fn second_coro() {
+  let f = fn(coro: Coroutine(Response, Request)) {
+    let first_resumed =
+      coro.yield(
+        Yielded(
+          aio.Request(kind: aio.Store, commands: [
+            aio.StoreCommand("coro2_cmd1"),
+          ]),
+        ),
+      )
+    io.debug("from coro 2, first resumed:")
+    io.debug(first_resumed)
+
+    let second_resumed =
+      coro.yield(
+        Yielded(
+          aio.Request(kind: aio.Store, commands: [
+            aio.StoreCommand("coro2_cmd2"),
+          ]),
+        ),
+      )
+    io.debug("from coro 2, second resumed:")
+    io.debug(second_resumed)
+    Nil
+  }
+
+  let coro = gloroutine.new(f)
+  gloop.RunnableCoroutine(coro: coro, next: Prime)
 }
 
 pub fn gloop_test() {
-  let coro = aio_coro()
-  let event_loop = gloop.new_event_loop()
+  let first_coro = first_coro()
+  let second_coro = second_coro()
 
-  let runnable = gloop.RunnableCoroutine(coro, Prime)
-
-  process.send(event_loop, gloop.Add(runnable))
-  process.send(event_loop, gloop.Tick(1))
-
-  process.send(event_loop, gloop.Add(runnable))
-  process.send(event_loop, gloop.Tick(1))
+  gloop.new()
+  |> gloop.attach(
+    aio.Store,
+    aio.Subsystem(handle: fn(_) {
+      aio.Response(kind: aio.Store, response: "success")
+    }),
+  )
+  |> gloop.add(first_coro)
+  |> gloop.add(second_coro)
+  |> gloop.tick(1)
+  |> gloop.tick(1)
+  |> gloop.tick(1)
 
   process.sleep_forever()
 }

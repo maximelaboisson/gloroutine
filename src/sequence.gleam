@@ -1,14 +1,13 @@
 import gleam/list
 import gloroutine.{
   type Coroutine, type CoroutineInput, Complete, Prime, Resumed, Yielded,
-  new_coroutine,
 }
 
 pub type Sequence(o) =
   Coroutine(Nil, o)
 
 pub fn new_sequence(f: fn(Sequence(o)) -> Nil) -> Sequence(o) {
-  new_coroutine(f)
+  gloroutine.new(f)
 }
 
 pub fn inner_to_list(
